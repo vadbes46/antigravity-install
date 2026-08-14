@@ -1,0 +1,15 @@
+#!/usr/bin/env sh
+
+if [ ! -L "$0" ]; then
+	ANTIGRAVITY_PATH="$(dirname "$0")/.."
+elif command -v readlink >/dev/null; then
+	ANTIGRAVITY_PATH="$(dirname "$(readlink -f "$0")")/.."
+else
+	ANTIGRAVITY_PATH="/usr/share/antigravity"
+fi
+
+if [ -f "$ANTIGRAVITY_PATH/sync_keyring.py" ]; then
+	python3 "$ANTIGRAVITY_PATH/sync_keyring.py" >/dev/null 2>&1 || true
+fi
+
+exec "$ANTIGRAVITY_PATH/antigravity" "$@"

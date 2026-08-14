@@ -1,0 +1,9 @@
+download/*
+!download/.gitkeep
+backup/*
+!backup/.gitkeep
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Agent (Antigravity)
+Comment=Dashboard Quota Monitor & Agent Control Panel
+Exec=/usr/bin/antigravity
+Icon=antigravity
+Type=Application
+Terminal=false
+StartupNotify=true
+StartupWMClass=antigravity
+Categories=Development;Utility;
