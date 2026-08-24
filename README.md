@@ -1,32 +1,32 @@
 # Antigravity Installer & Toolkit
 
-Набор скриптов для автоматизированной установки, обновления и синхронизации **Google Antigravity IDE** и **Antigravity Agent Manager** в Linux-окружении (Ubuntu, Debian и др., архитектуры `x86_64` и `arm64/aarch64`).
+A set of scripts for automated installation, updating, and synchronization of **Google Antigravity IDE** and **Antigravity Agent Manager** in Linux environments (Ubuntu, Debian, etc., `x86_64` and `arm64/aarch64` architectures).
 
 ---
 
-## 📋 Оглавление
+## 📋 Table of Contents
 
-1. [Запуск (`./exec.sh`)](#-запуск-execsh)
-2. [Возможности и функции](#-возможности-и-функции)
-   - [1. Установка и обновление (Installer)](#1-установка-и-обновление-installer)
-   - [2. Синхронизация метаданных (Metadata Sync)](#2-синхронизация-метаданных-metadata-sync)
-   - [3. Управление версиями (Version Resolver)](#3-управление-версиями-version-resolver)
-   - [4. Интеграция с системой (Desktop & Shell Integration)](#4-интеграция-с-системой-desktop--shell-integration)
-3. [Переменные окружения](#-переменные-окружения)
-4. [Структура репозитория](#-структура-репозитория)
-5. [Решение проблем](#-решение-проблем)
+1. [Quick Start (`./exec.sh`)](#-quick-start-execsh)
+2. [Features & Capabilities](#-features--capabilities)
+   - [1. Installation & Updates (Installer)](#1-installation--updates-installer)
+   - [2. Metadata Synchronization (Metadata Sync)](#2-metadata-synchronization-metadata-sync)
+   - [3. Version Management (Version Resolver)](#3-version-management-version-resolver)
+   - [4. System Integration (Desktop & Shell Integration)](#4-system-integration-desktop--shell-integration)
+3. [Environment Variables](#-environment-variables)
+4. [Repository Structure](#-repository-structure)
+5. [Troubleshooting](#-troubleshooting)
 
 ---
 
-## 🚀 Запуск (`./exec.sh`)
+## 🚀 Quick Start (`./exec.sh`)
 
-Запустите скрипт в терминале:
+Run the script in your terminal:
 
 ```bash
 ./exec.sh
 ```
 
-Откроется интерактивное меню:
+An interactive menu will appear:
 
 ```text
 ==================================================
@@ -38,125 +38,125 @@
 Select action [1]:
 ```
 
-- **1) Install Agent/IDE** — установка или обновление Antigravity IDE и Agent Manager.
-- **2) Sync conversation metadata** — синхронизация истории диалогов между IDE и Hub.
+- **1) Install Agent/IDE** — install or update Antigravity IDE and Agent Manager.
+- **2) Sync conversation metadata** — synchronize conversation history between the IDE and Hub.
 
 ---
 
-## ⚙️ Возможности и функции
+## ⚙️ Features & Capabilities
 
-### 1. Установка и обновление (Installer)
+### 1. Installation & Updates (Installer)
 
-Скрипт `helpers/install.sh` выполняет полный цикл развертывания:
+The `helpers/install.sh` script performs a full deployment lifecycle:
 
-- **Автоматическое скачивание и распаковка**:
-  - Скачивает официальные архивы Antigravity IDE и Agent Manager напрямую из Google Cloud Storage / EdgeDL.
-  - Сохраняет архивы в локальный кэш `download/`, предотвращая повторные загрузки.
-  - Автоматически определяет архитектуру вашей ОС (`linux-x64` или `linux-arm`).
-- **Интерактивный выбор конфигурации сборки**:
-  1. **Standard Stable (Рекомендуется)** — автоматически определяет и скачивает самые свежие стабильные релизы.
-  2. **Custom Build Versions / Hashes** — позволяет указать короткую версию (например `2.5.5` для IDE или `2.8.1` для Agent) либо полный хэш сборки.
-  3. **Direct Download URLs** — возможность передать прямые URL на кастомные архивы.
-- **Безопасная очистка процессов**:
-  - Перед установкой корректно завершает работающие процессы Antigravity и Cockpit Tools (`SIGTERM` -> `SIGKILL`), исключая конфликты блокировки файлов и не затрагивая родительские сессии.
-- **Настройка песочницы Electron**:
-  - Выставляет корректные SUID-права `chmod 4755` на `chrome-sandbox`, устраняя типичные ошибки запуска Electron-приложений под Linux.
-- **Warmup-инициализация**:
-  - После установки запускает фоновый процесс на несколько секунд для генерации директорий среды и файлов `installation_id` в `~/.gemini/`.
-
----
-
-### 2. Синхронизация метаданных (Metadata Sync)
-
-Скрипт `helpers/sync.py` (вызываемый через пункт меню 2) решает проблему рассинхронизации истории чатов:
-
-- **Объединение двух форматов**:
-  - **Standalone Hub**: `~/.gemini/antigravity/agyhub_summaries_proto.pb` (бинарный Protobuf wire format).
-  - **IDE Storage**: `~/.config/Antigravity/User/globalStorage/state.vscdb` (SQLite базы данных, ключи `antigravityUnifiedStateSync.trajectorySummaries` и `unifiedStateSync.trajectorySummaries` в формате Base64).
-- **Парсинг и нормализация**:
-  - Декодирует Protobuf Varint и теги полей.
-  - Устраняет дубликаты по UUID траектории диалога.
-  - Записывает обновленные данные в оба хранилища.
-- **Автоматическое резервное копирование**:
-  - Создает резервные копии `.bak` для каждого изменяемого файла перед записью.
+- **Automated Download & Extraction**:
+  - Downloads official Antigravity IDE and Agent Manager archives directly from Google Cloud Storage / EdgeDL.
+  - Saves archives to the local `download/` cache directory to avoid redundant downloads.
+  - Automatically detects your OS architecture (`linux-x64` or `linux-arm`).
+- **Interactive Build Configuration Selection**:
+  1. **Standard Stable (Recommended)** — automatically resolves and downloads the latest stable releases.
+  2. **Custom Build Versions / Hashes** — allows specifying a short version (e.g. `2.5.5` for IDE or `2.8.1` for Agent) or a full build hash.
+  3. **Direct Download URLs** — option to provide direct URLs to custom archives.
+- **Safe Process Cleanup**:
+  - Gracefully terminates running Antigravity and Cockpit Tools processes (`SIGTERM` -> `SIGKILL`) before installation, avoiding file-locking conflicts without affecting parent sessions.
+- **Electron Sandbox Configuration**:
+  - Sets appropriate SUID permissions `chmod 4755` on `chrome-sandbox`, resolving common Electron startup errors on Linux.
+- **Warmup Initialization**:
+  - Launches a brief background process post-installation to initialize environment directories and `installation_id` files in `~/.gemini/`.
 
 ---
 
-### 3. Управление версиями (Version Resolver)
+### 2. Metadata Synchronization (Metadata Sync)
 
-Файл `helpers/versions.sh`:
-- Хранит встроенную таблицу соответствия версий и идентификаторов сборок.
-- Умеет опрашивать бакет `https://storage.googleapis.com/antigravity-public` и страницу загрузок для поиска новых релизов в реальном времени.
+The `helpers/sync.py` script (invoked via menu option 2) resolves conversation history desynchronization between clients:
+
+- **Two-Format Merging**:
+  - **Standalone Hub**: `~/.gemini/antigravity/agyhub_summaries_proto.pb` (binary Protobuf wire format).
+  - **IDE Storage**: `~/.config/Antigravity/User/globalStorage/state.vscdb` (SQLite database, `antigravityUnifiedStateSync.trajectorySummaries` and `unifiedStateSync.trajectorySummaries` Base64 keys).
+- **Parsing & Normalization**:
+  - Decodes Protobuf Varints and field tags.
+  - Deduplicates conversation entries by trajectory UUID.
+  - Writes the synchronized state back to both storage locations.
+- **Automatic Backups**:
+  - Creates `.bak` backup files for every modified file before writing changes.
 
 ---
 
-### 4. Интеграция с системой (Desktop & Shell Integration)
+### 3. Version Management (Version Resolver)
 
-Инсталлятор полностью интегрирует приложения в систему:
+The `helpers/versions.sh` script:
+- Maintains a built-in mapping table between version numbers and build hashes.
+- Queries the `https://storage.googleapis.com/antigravity-public` bucket and download pages to discover new releases in real time.
 
-| Компонент | Расположение | Описание |
+---
+
+### 4. System Integration (Desktop & Shell Integration)
+
+The installer provides comprehensive system integration:
+
+| Component | Location | Description |
 | :--- | :--- | :--- |
-| **Бинарные симлинки** | `/usr/bin/antigravity`, `/usr/bin/antigravity-ide` | Доступ к запуску из любого терминала |
-| **Ярлыки приложений** | `/usr/share/applications/*.desktop` | Интеграция в системное меню приложений GNOME/KDE/XFCE и регистрация URL-хэндлера |
-| **Иконки** | `/usr/share/icons/hicolor/` | PNG (256x256) и векторные SVG иконки |
-| **Автодополнение Bash** | `/usr/share/bash-completion/completions/antigravity-ide` | Автокомплит команд в оболочке |
-| **MIME типы** | `/usr/share/mime/packages/antigravity-ide-workspace.xml` | Ассоциация файлов воркспейсов с IDE |
-| **Cockpit Tools** | `~/.antigravity_cockpit/config.json` | Автоматическая настройка WebSocket-порта (19528) и путей при наличии Cockpit Tools |
+| **Binary Symlinks** | `/usr/bin/antigravity`, `/usr/bin/antigravity-ide` | Global terminal command access |
+| **Desktop Entries** | `/usr/share/applications/*.desktop` | GNOME/KDE/XFCE application menu integration and URL handler registration |
+| **Icons** | `/usr/share/icons/hicolor/` | PNG (256x256) and vector SVG icons |
+| **Bash Completion** | `/usr/share/bash-completion/completions/antigravity-ide` | Command-line auto-completion for bash |
+| **MIME Types** | `/usr/share/mime/packages/antigravity-ide-workspace.xml` | Workspace file association with the IDE |
+| **Cockpit Tools** | `~/.antigravity_cockpit/config.json` | Automatic WebSocket port (19528) and path configuration when Cockpit Tools is present |
 
 ---
 
-## 🔧 Переменные окружения
+## 🔧 Environment Variables
 
-Вы можете настраивать поведение скрипта с помощью переменных окружения при запуске:
+You can customize script behavior using environment variables during execution:
 
 ```bash
-# Создавать zip-бэкапы пользовательских конфигов перед установкой
+# Create zip backups of user configs before installation
 BACKUP_USER_STATE=true ./exec.sh
 
-# Автоматически закрывать приложения после завершения warmup-проверки
+# Automatically close applications after the warmup check completes
 WARMUP_AUTO_CLOSE=true ./exec.sh
 ```
 
-| Переменная | Значение по умолчанию | Описание |
+| Variable | Default | Description |
 | :--- | :--- | :--- |
-| `BACKUP_USER_STATE` | `false` | Если `true`, архивирует папки `~/.config/Antigravity*` и `~/.gemini` в папку `backup/`. |
-| `WARMUP_AUTO_CLOSE` | `false` | Если `true`, принудительно завершает приложения, запущенные на этапе warmup-инициализации. |
+| `BACKUP_USER_STATE` | `false` | When `true`, archives `~/.config/Antigravity*` and `~/.gemini` directories into the `backup/` folder. |
+| `WARMUP_AUTO_CLOSE` | `false` | When `true`, forcefully terminates applications launched during the warmup initialization phase. |
 
 ---
 
-## 📁 Структура репозитория
+## 📁 Repository Structure
 
 ```text
 .
-├── exec.sh                   # Главное интерактивное меню
-├── README.md                 # Документация
-├── download/                 # Каталог кэширования скачанных tar.gz архивов
-├── backup/                   # Каталог для zip-архивов резервных копий
+├── exec.sh                   # Main interactive menu
+├── README.md                 # Documentation
+├── download/                 # Cache directory for downloaded tar.gz archives
+├── backup/                   # Directory for backup zip archives
 ├── helpers/
-│   ├── common.sh             # Цветовое логирование, keep-alive для sudo-сессии
-│   ├── install.sh            # Скрипт установки IDE и Agent Manager
-│   ├── process.sh            # Логика поиска и завершения процессов
-│   ├── sync.py               # Низкоуровневая синхронизация Protobuf / SQLite
-│   ├── sync.sh               # Обёртка для запуска sync.py
-│   └── versions.sh           # Справочник версий и автопоиск в Google Storage
-└── usr/                      # Шаблоны системных файлов
+│   ├── common.sh             # Color logging, sudo session keep-alive
+│   ├── install.sh            # IDE and Agent Manager installer script
+│   ├── process.sh            # Process discovery and termination logic
+│   ├── sync.py               # Low-level Protobuf / SQLite synchronization
+│   ├── sync.sh               # Runner wrapper for sync.py
+│   └── versions.sh           # Version mapping and Google Storage resolver
+└── usr/                      # System file templates
     └── share/
-        ├── applications/     # .desktop файлы
-        ├── bash-completion/  # Скрипты автодополнения
-        ├── icons/            # Иконки приложений
-        └── mime/             # MIME-типы воркспейсов
+        ├── applications/     # .desktop files
+        ├── bash-completion/  # Shell auto-completion scripts
+        ├── icons/            # Application icons
+        └── mime/             # Workspace MIME types
 ```
 
 ---
 
-## ❓ Решение проблем
+## ❓ Troubleshooting
 
-1. **Не запускается IDE из-за песочницы (SUID Sandbox)**:
-   Инсталлятор автоматически выполняет `chmod 4755 /usr/share/antigravity/chrome-sandbox`. Если ошибка повторяется, выберите пункт установки в `./exec.sh` повторно для восстановления прав.
+1. **IDE fails to launch due to sandbox error (SUID Sandbox)**:
+   The installer automatically executes `chmod 4755 /usr/share/antigravity/chrome-sandbox`. If the issue persists, run `./exec.sh` and select the install option again to restore proper permissions.
 
-2. **Не видны последние диалоги в IDE или Standalone-агенте**:
-   Запустите `./exec.sh` и выберите пункт `2) Sync conversation metadata`. Скрипт прочитает существующие диалоги и объединит их в актуальное состояние.
+2. **Recent conversations not showing up in IDE or Standalone Agent**:
+   Run `./exec.sh` and select option `2) Sync conversation metadata`. The script will read existing conversations and merge them into an up-to-date state.
 
-3. **Запуск установленных приложений**:
-   - IDE: `antigravity-ide` (или через меню приложений)
-   - Agent Manager: `antigravity` (или через меню приложений)
+3. **Launching Installed Applications**:
+   - IDE: `antigravity-ide` (or via your desktop application menu)
+   - Agent Manager: `antigravity` (or via your desktop application menu)
