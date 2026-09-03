@@ -110,8 +110,17 @@ The installer provides comprehensive system integration:
 You can customize script behavior using environment variables during execution:
 
 ```bash
+# Install only Antigravity IDE
+INSTALL_IDE=true INSTALL_AGENT=false ./exec.sh
+
+# Install only Antigravity Agent Manager
+INSTALL_IDE=false INSTALL_AGENT=true ./exec.sh
+
 # Create zip backups of user configs before installation
-BACKUP_USER_STATE=true ./exec.sh
+BACKUP_DATA=true ./exec.sh
+
+# Clean all user configs (clean all) before installation
+CLEAN_ALL=true ./exec.sh
 
 # Automatically close applications after the warmup check completes
 WARMUP_AUTO_CLOSE=true ./exec.sh
@@ -119,7 +128,10 @@ WARMUP_AUTO_CLOSE=true ./exec.sh
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
-| `BACKUP_USER_STATE` | `false` | When `true`, archives `~/.config/Antigravity*` and `~/.gemini` directories into the `backup/` folder. |
+| `INSTALL_IDE` | `true` (prompted interactively) | When `true`, installs/updates Antigravity IDE. |
+| `INSTALL_AGENT` | `true` (prompted interactively) | When `true`, installs/updates Antigravity Agent Manager. |
+| `BACKUP_DATA` | `false` (prompted interactively if configs exist) | When `true`, archives `~/.config/Antigravity*` and `~/.gemini` directories into the `backup/` folder. |
+| `CLEAN_ALL` | `false` (prompted interactively if configs exist) | When `true`, completely cleans/removes existing user data (`~/.config/Antigravity*` and `~/.gemini`). |
 | `WARMUP_AUTO_CLOSE` | `false` | When `true`, forcefully terminates applications launched during the warmup initialization phase. |
 
 ---
