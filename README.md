@@ -86,7 +86,7 @@ The `helpers/sync.py` script (invoked via menu option 2) resolves conversation h
 
 The `helpers/versions.sh` script:
 - Maintains a built-in mapping table between version numbers and build hashes.
-- Queries the `https://storage.googleapis.com/antigravity-public` bucket and download pages to discover new releases in real time.
+- Queries the official Antigravity auto-updater `/releases` endpoints (with `https://antigravity.google/download` fallback) to discover new releases in real time.
 
 ---
 

@@ -55,6 +55,10 @@ AGENT_VERSIONS=(
     "2.32.1" "2.32.1-6001966350991360"
 )
 
+HUB_RELEASES_API_URL="https://antigravity-hub-auto-updater-974169037036.us-central1.run.app/releases"
+IDE_RELEASES_API_URL="https://antigravity-ide-auto-updater-974169037036.us-central1.run.app/releases"
+DOWNLOAD_PAGE_URL="https://antigravity.google/download"
+
 upsert_version_pair() {
     local array_name="$1"
     local short_version="$2"
@@ -72,18 +76,104 @@ upsert_version_pair() {
     versions_ref+=("$short_version" "$full_version")
 }
 
-fetch_all_agent_builds_from_bucket() {
+version_gt() {
+    local a="${1%%-*}"
+    local b="${2%%-*}"
+
+    [ -n "$a" ] || return 1
+    [ -n "$b" ] || return 0
+    [ "$a" != "$b" ] || return 1
+    [ "$(printf '%s\n%s\n' "$a" "$b" | sort -V | tail -n 1)" = "$a" ]
+}
+
+sort_version_map() {
+    local array_name="$1"
+    local -n versions_ref="$array_name"
+    local -a sorted_pairs=()
+    local i short_ver full_ver
+
+    if [ ${#versions_ref[@]} -eq 0 ]; then
+        return 0
+    fi
+
+    while IFS=' ' read -r short_ver full_ver; do
+        if [ -n "$short_ver" ] && [ -n "$full_ver" ]; then
+            sorted_pairs+=("$short_ver" "$full_ver")
+        fi
+    done < <(
+        for ((i=0; i<${#versions_ref[@]}; i+=2)); do
+            printf '%s %s\n' "${versions_ref[$i]}" "${versions_ref[$((i+1))]}"
+        done | sort -k1,1V -k2,2V
+    )
+
+    if [ ${#sorted_pairs[@]} -gt 0 ]; then
+        versions_ref=("${sorted_pairs[@]}")
+    else
+        versions_ref=()
+    fi
+}
+
+parse_releases_json() {
+    if command -v python3 >/dev/null 2>&1; then
+        python3 -c 'import json, re, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+items = data if isinstance(data, list) else data.get("versions", []) if isinstance(data, dict) else []
+for item in items:
+    if isinstance(item, dict):
+        ver = str(item.get("version", "")).strip()
+        exec_id = str(item.get("execution_id", "")).strip()
+        if re.fullmatch(r"2\.[0-9]+\.[0-9]+", ver) and re.fullmatch(r"[0-9]+", exec_id):
+            print(f"{ver}-{exec_id}")'
+        return 0
+    fi
+
+    tr -d '\r\n' | grep -Eo '\{[^{}]*\}' | while IFS= read -r obj; do
+        local ver eid
+        ver="$(printf '%s\n' "$obj" | sed -nE 's/.*"version"[[:space:]]*:[[:space:]]*"(2\.[0-9]+\.[0-9]+)".*/\1/p')"
+        eid="$(printf '%s\n' "$obj" | sed -nE 's/.*"execution_id"[[:space:]]*:[[:space:]]*"([0-9]+)".*/\1/p')"
+        if [ -n "$ver" ] && [ -n "$eid" ]; then
+            printf '%s-%s\n' "$ver" "$eid"
+        fi
+    done || true
+}
+
+fetch_builds_from_releases_api() {
+    local api_url="$1"
+    local payload
+
     if ! command -v curl >/dev/null 2>&1; then
         return 1
     fi
 
-    {
-        curl -fsSL --compressed "https://antigravity.google/download" 2>/dev/null || true
-        curl -fsSL "https://storage.googleapis.com/antigravity-public?prefix=antigravity-hub/&delimiter=/" 2>/dev/null || true
-    } \
-        | grep -Eo 'antigravity-hub/2\.[0-9]+\.[0-9]+-[0-9]+' \
-        | sed -E 's#antigravity-hub/##' \
-        | sort -V
+    payload="$(curl -fsSL --compressed --connect-timeout 5 --max-time 15 "$api_url" 2>/dev/null || true)"
+    if [ -z "$payload" ]; then
+        return 0
+    fi
+
+    printf '%s' "$payload" | parse_releases_json | sort -Vu
+}
+
+fetch_all_agent_builds_from_bucket() {
+    local builds page_html
+
+    if ! command -v curl >/dev/null 2>&1; then
+        return 1
+    fi
+
+    builds="$(fetch_builds_from_releases_api "$HUB_RELEASES_API_URL" || true)"
+    if [ -z "$builds" ]; then
+        page_html="$(curl -fsSL --compressed --connect-timeout 5 --max-time 15 "$DOWNLOAD_PAGE_URL" 2>/dev/null || true)"
+        if [ -n "$page_html" ]; then
+            builds="$(printf '%s' "$page_html" | grep -Eo 'antigravity-hub/2\.[0-9]+\.[0-9]+-[0-9]+' | sed -E 's#antigravity-hub/##' | sort -Vu || true)"
+        fi
+    fi
+
+    if [ -n "$builds" ]; then
+        printf '%s\n' "$builds"
+    fi
 }
 
 fetch_latest_agent_build_from_bucket() {
@@ -97,7 +187,7 @@ ide_build_exists_for_any_arch() {
 
     for arch in linux-x64 linux-arm; do
         ide_url="https://edgedl.me.gvt1.com/edgedl/release2/j0qc3/antigravity/stable/${ide_build}/${arch}/Antigravity%20IDE.tar.gz"
-        if curl -fsSLI "$ide_url" >/dev/null 2>&1; then
+        if curl -fsSLI --connect-timeout 5 --max-time 10 "$ide_url" >/dev/null 2>&1; then
             return 0
         fi
     done
@@ -105,7 +195,28 @@ ide_build_exists_for_any_arch() {
     return 1
 }
 
+fetch_all_ide_builds_from_api() {
+    local builds page_html
+
+    if ! command -v curl >/dev/null 2>&1; then
+        return 1
+    fi
+
+    builds="$(fetch_builds_from_releases_api "$IDE_RELEASES_API_URL" || true)"
+    if [ -z "$builds" ]; then
+        page_html="$(curl -fsSL --compressed --connect-timeout 5 --max-time 15 "$DOWNLOAD_PAGE_URL" 2>/dev/null || true)"
+        if [ -n "$page_html" ]; then
+            builds="$(printf '%s' "$page_html" | grep -Eo 'edgedl/release2/j0qc3/antigravity/stable/2\.[0-9]+\.[0-9]+-[0-9]+' | sed -E 's#^.*/stable/##' | sort -Vu || true)"
+        fi
+    fi
+
+    if [ -n "$builds" ]; then
+        printf '%s\n' "$builds"
+    fi
+}
+
 fetch_candidate_ide_builds() {
+    local pre_fetched_api_builds="${1:-}"
     local i
     local version_source="${ANTIGRAVITY_VERSION_SOURCE:-${BASH_SOURCE[0]}}"
     local download_dir="${DOWNLOAD_DIR:-${SCRIPT_DIR:-$(pwd)}/download}"
@@ -114,92 +225,108 @@ fetch_candidate_ide_builds() {
         echo "${IDE_VERSIONS[$i]}"
     done
 
-    grep -Eo '"2\.[0-9]+\.[0-9]+"[[:space:]]+"2\.[0-9]+\.[0-9]+-[0-9]+"' "$version_source" 2>/dev/null \
-        | sed -E 's/^"[^"]+"[[:space:]]+"([^"]+)".*/\1/' || true
+    if [ -f "$version_source" ]; then
+        if grep -q '^IDE_VERSIONS=(' "$version_source" 2>/dev/null; then
+            sed -n '/^IDE_VERSIONS=(/,/^)/p' "$version_source" 2>/dev/null
+        else
+            cat "$version_source" 2>/dev/null
+        fi | grep -Eo '"2\.[0-9]+\.[0-9]+"[[:space:]]+"2\.[0-9]+\.[0-9]+-[0-9]+"' \
+           | sed -E 's/^"[^"]+"[[:space:]]+"([^"]+)".*/\1/' || true
+    fi
 
     find "$download_dir" -maxdepth 1 -type f -name 'Antigravity_IDE_2.*.tar.gz' -printf '%f\n' 2>/dev/null \
         | sed -E 's/^Antigravity_IDE_(.*)\.tar\.gz$/\1/' || true
 
-    curl -fsSL --compressed "https://antigravity.google/download" 2>/dev/null \
-        | grep -Eo 'edgedl/release2/j0qc3/antigravity/stable/2\.[0-9]+\.[0-9]+-[0-9]+' \
-        | sed -E 's#^.*/stable/##' || true
+    if [ -n "$pre_fetched_api_builds" ]; then
+        printf '%s\n' "$pre_fetched_api_builds"
+    else
+        fetch_all_ide_builds_from_api || true
+    fi
 }
 
 refresh_ide_versions_from_remote() {
-    local current_latest_build latest_verified_ide_build short_ide_version candidate_build i
+    local current_latest_build latest_verified_ide_build short_ide_version candidate_build api_builds build i found_in_local
     current_latest_build="$(latest_build_from_map "${IDE_VERSIONS[@]}")"
+    api_builds="$(fetch_all_ide_builds_from_api || true)"
     latest_verified_ide_build=""
 
     while IFS= read -r candidate_build; do
-        if ide_build_exists_for_any_arch "$candidate_build"; then
+        if [ -n "$candidate_build" ] && ide_build_exists_for_any_arch "$candidate_build"; then
             latest_verified_ide_build="$candidate_build"
+            break
         fi
-    done < <(fetch_candidate_ide_builds | sort -Vu)
+    done < <(fetch_candidate_ide_builds "$api_builds" | sort -rVu)
 
     if [ -z "$latest_verified_ide_build" ]; then
         return 0
     fi
 
-    short_ide_version="${latest_verified_ide_build%%-*}"
+    found_in_local="false"
     for ((i=1; i<${#IDE_VERSIONS[@]}; i+=2)); do
         if [ "${IDE_VERSIONS[$i]}" = "$latest_verified_ide_build" ]; then
-            upsert_version_pair "IDE_VERSIONS" "$short_ide_version" "$latest_verified_ide_build"
-            return 0
+            found_in_local="true"
+            break
         fi
     done
 
-    if [ "$latest_verified_ide_build" != "$current_latest_build" ]; then
-        log_warn "Found newer IDE version in repository: ${latest_verified_ide_build}"
-    else
-        log_warn "Found IDE build in repository not present in local IDE_VERSIONS: ${latest_verified_ide_build}"
+    if [ "$found_in_local" != "true" ]; then
+        if version_gt "$latest_verified_ide_build" "$current_latest_build"; then
+            log_warn "Found newer IDE version in repository: ${latest_verified_ide_build}"
+        else
+            log_warn "Found IDE build in repository not present in local IDE_VERSIONS: ${latest_verified_ide_build}"
+        fi
     fi
+
+    if [ -n "$api_builds" ]; then
+        while IFS= read -r build; do
+            if [ -n "$build" ] && ! version_gt "$build" "$latest_verified_ide_build"; then
+                upsert_version_pair "IDE_VERSIONS" "${build%%-*}" "$build"
+            fi
+        done < <(printf '%s\n' "$api_builds")
+    fi
+
+    short_ide_version="${latest_verified_ide_build%%-*}"
     upsert_version_pair "IDE_VERSIONS" "$short_ide_version" "$latest_verified_ide_build"
+    sort_version_map "IDE_VERSIONS"
 }
 
 refresh_agent_versions_from_remote() {
-    local builds
+    local builds current_latest_build remote_latest_build current_short remote_short build short_agent_version
     builds="$(fetch_all_agent_builds_from_bucket || true)"
     if [ -z "$builds" ]; then
         return 0
     fi
 
-    # 1. Identify and log warnings for new versions/branches
-    local branches branch remote_latest local_latest i full_ver
-    branches="$(echo "$builds" | cut -d. -f1,2 | sort -u)"
-    
-    while IFS= read -r branch; do
-        if [ -n "$branch" ]; then
-            remote_latest="$(echo "$builds" | grep -E "^${branch//./\.}\." | tail -n 1)"
-            
-            # Find local latest build for this branch in AGENT_VERSIONS
-            local local_branch_builds=()
-            for ((i=0; i<${#AGENT_VERSIONS[@]}; i+=2)); do
-                full_ver="${AGENT_VERSIONS[$((i+1))]}"
-                if [[ "$full_ver" =~ ^$branch\. ]]; then
-                    local_branch_builds+=("${AGENT_VERSIONS[$i]}" "$full_ver")
-                fi
-            done
-            local_latest="$(latest_build_from_map "${local_branch_builds[@]}")"
-            
-            if [ -n "$remote_latest" ] && [ "$remote_latest" != "$local_latest" ]; then
-                log_warn "Found newer Agent Manager version in repository: ${remote_latest}"
-            fi
+    current_latest_build="$(latest_build_from_map "${AGENT_VERSIONS[@]}")"
+    remote_latest_build="$(printf '%s\n' "$builds" | tail -n 1)"
+    current_short="${current_latest_build%%-*}"
+    remote_short="${remote_latest_build%%-*}"
+
+    # 1. Identify and log warnings for newer versions
+    if [ -n "$remote_latest_build" ]; then
+        if version_gt "$remote_short" "$current_short" || { [ "$remote_short" = "$current_short" ] && [ "$remote_latest_build" != "$current_latest_build" ]; }; then
+            log_warn "Found newer Agent Manager version in repository: ${remote_latest_build}"
         fi
-    done < <(echo "$branches")
+    fi
 
     # 2. Update AGENT_VERSIONS array
-    local build short_agent_version
     while IFS= read -r build; do
         if [ -n "$build" ]; then
             short_agent_version="${build%%-*}"
             upsert_version_pair "AGENT_VERSIONS" "$short_agent_version" "$build"
         fi
-    done < <(echo "$builds")
+    done < <(printf '%s\n' "$builds")
+
+    sort_version_map "AGENT_VERSIONS"
 }
 
 latest_build_from_map() {
     local -a versions=("$@")
     local i
+
+    if [ ${#versions[@]} -eq 0 ]; then
+        return 0
+    fi
 
     for ((i=0; i<${#versions[@]}; i+=2)); do
         echo "${versions[$i]} ${versions[$((i+1))]}"
